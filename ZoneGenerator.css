@@ -1,0 +1,315 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using System.Linq;
+
+[ExecuteInEditMode]
+public class ZonesGenerator : MonoBehaviour
+{
+    public GameObject prefab;
+    public int HangHight;
+    List<GameObject> zoneMeshGoLst = new List<GameObject>();
+    MapZoneHookableGenerator _myRootMngr;
+    int zoneCounter = 1;
+
+    void Start()
+    {
+
+    }
+
+    Vector3[] PolyCreate(Vector3[] vertex,GameObject pointOne, GameObject pointTwo,GameObject pointThree,bool last)
+    {
+        GameObject NewMesh = Instantiate(prefab);
+        NewMesh.GetComponent<Collider2D>().enabled = true;
+
+        float x1 = (pointOne.transform.position.x - pointTwo.transform.position.x);
+        float y1 = (pointOne.transform.position.y - pointTwo.transform.position.y);
+        float length1 = Mathf.Sqrt(Mathf.Pow(x1, 2) + Mathf.Pow(y1, 2));
+        float x1B = (x1 / length1);
+        float y1B = (y1 / length1);
+
+
+        float angle1 = Mathf.Atan2(y1B, x1B);
+        if (angle1 < 0)
+        {
+            angle1 = angle1 + 2 * Mathf.PI;
+        }
+        float between;
+
+        if (last == false)
+        {
+            float x3 = (pointThree.transform.position.x - pointTwo.transform.position.x);
+            float y3 = (pointThree.transform.position.y - pointTwo.transform.position.y);
+            float length3 = Mathf.Sqrt(Mathf.Pow(x3, 2) + Mathf.Pow(y3, 2));
+            float x3B = (x3 / length3);
+            float y3B = (y3 / length3);
+
+            float angle3 = Mathf.Atan2(y3B, x3B);
+            
+             between = ((((angle1 - angle3)) / 2) + angle3);
+        }
+        else
+        {
+            float x3 = -(pointOne.transform.position.x - pointTwo.transform.position.x);
+            float y3 = -(pointOne.transform.position.y - pointTwo.transform.position.y);
+            float length3 = Mathf.Sqrt(Mathf.Pow(x3, 2) + Mathf.Pow(y3, 2));
+            float x3B = (x3 / length3);
+            float y3B = (y3 / length3);
+
+            float angle3 = Mathf.Atan2(y3B, x3B);
+            
+            between = ((((angle1 - angle3)) / 2) + angle3);
+
+        }
+
+
+        float point2x = HangHight * Mathf.Cos(between);
+        float point2y = HangHight * Mathf.Sin(between);
+
+
+        float point3x = HangHight * Mathf.Cos(between+Mathf.PI);
+        float point3y = HangHight * Mathf.Sin(between+Mathf.PI);
+
+
+        Vector3[] vertices;
+        Vector2[] uvs;
+
+        vertices = new Vector3[]
+       {
+                vertex[3],
+                vertex[2],
+
+                new Vector3(pointTwo.transform.position.x+point2x, pointTwo.transform.position.y+point2y,0),
+                new Vector3(pointTwo.transform.position.x+point3x, pointTwo.transform.position.y+point3y,0)
+       };
+        uvs = new Vector2[]
+        {
+                new Vector2(vertex[3].x, vertex[3].y),
+                new Vector2(vertex[2].x, vertex[2].y),
+
+                new Vector2(pointTwo.transform.position.x+point2x, pointTwo.transform.position.y+point2y),
+                new Vector2(pointTwo.transform.position.x+point3x, pointTwo.transform.position.y+point3y)
+
+        };
+
+        //Mesh mesh = NewMesh.GetComponent<MeshFilter>().mesh;
+
+        Mesh mesh = new Mesh();
+        NewMesh.GetComponent<MeshFilter>().sharedMesh = mesh;
+        mesh.Clear();
+        mesh.vertices = vertices;
+        mesh.uv = uvs;
+        mesh.triangles = new int[] { 0, 1, 2, 0, 2, 3 };
+
+
+
+        int[] Triangles = mesh.triangles;
+        Vector2[] Points = new Vector2[Triangles.Length];
+        for (int n = 0; n < Triangles.Length; n++)
+        {
+            Points[n] = (Vector2)(mesh.vertices[Triangles[n]]);
+        }
+
+        NewMesh.transform.parent   = _myRootMngr.generatedRootTrns; 
+        zoneMeshGoLst.Add(NewMesh);
+        
+
+        //positioning system
+        PositioningSystemZoneEntry zoneEntry = NewMesh.GetComponent<PositioningSystemZoneEntry>();
+        if (zoneEntry)
+        {
+            zoneEntry._myZoneStartPoint = pointOne.transform;
+            zoneEntry._myZoneEndPoint = pointTwo.transform;
+            zoneEntry._myZoneId = zoneCounter;
+            zoneCounter++;
+        }
+        UpdatePolygonColliders(NewMesh.GetComponent<MeshFilter>(), transform);
+        //this is to save the changes to the prefab. without this prefab doesnt get notified of the changes
+        var prefabStage = UnityEditor.Experimental.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
+        if (prefabStage != null)
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(prefabStage.scene);
+        }
+        return vertices;
+    }
+
+    // Update is called once per frame
+  public  void UpdateZones(bool isGenerateActive)
+    {
+        if (!_myRootMngr) _myRootMngr = GetComponentInParent<MapZoneHookableGenerator>();
+
+        for (int i = 0; i < zoneMeshGoLst.Count;i++)
+        {
+            Debug.Log("DESTROYIIIIINGGGG");
+            DestroyImmediate(zoneMeshGoLst[i]);
+        }
+
+        zoneMeshGoLst.Clear();
+        zoneCounter = 1;
+        if (!isGenerateActive) return;
+
+
+        Vector3[] vertexes = new Vector3[] { };
+        for (int j = 0; j < _myRootMngr.waypointTrnsLst.Count - 1; j++)
+        {
+            if (j == 0)
+            {
+                vertexes = new Vector3[] {
+                new Vector3(0, 0, 0),
+                new Vector3(0, 0, 0),
+                new Vector3(_myRootMngr.waypointTrnsLst[j].position.x,
+                           _myRootMngr.waypointTrnsLst[j].position.y + HangHight, 0),
+                new Vector3(_myRootMngr.waypointTrnsLst[j].position.x,
+                            _myRootMngr.waypointTrnsLst[j].position.y - HangHight, 0)
+                };
+
+                //vertexes = PolyCreate(vertexes, _myRootMngr.waypointTrnsLst[j].gameObject, _myRootMngr.waypointTrnsLst[j + 1].gameObject, _myRootMngr.waypointTrnsLst[j + 2].gameObject, false);
+
+            }
+            if (j == _myRootMngr.waypointTrnsLst.Count - 2)
+            {
+                vertexes = PolyCreate(vertexes, _myRootMngr.waypointTrnsLst[j].gameObject, _myRootMngr.waypointTrnsLst[j + 1].gameObject, _myRootMngr.waypointTrnsLst[j + 1].gameObject,true);
+            }
+            else 
+            {
+                vertexes = PolyCreate(vertexes, _myRootMngr.waypointTrnsLst[j].gameObject, _myRootMngr.waypointTrnsLst[j+1].gameObject, _myRootMngr.waypointTrnsLst[j + 2].gameObject,false);
+            }
+        }
+
+    }
+
+
+    void UpdatePolygonColliders(MeshFilter meshFilter, Transform trns)
+    {
+        if (meshFilter.GetComponent<PolygonCollider2D>() == null)
+        {
+            Debug.LogWarning(meshFilter.gameObject.name + " has no Mesh PolygonCollider2D on its MeshFilter component!");
+            meshFilter.gameObject.AddComponent<PolygonCollider2D>();
+        }
+
+        if (meshFilter.GetComponent<PolygonCollider2D>() != null)
+        {
+            UpdatePolygonCollider2D(meshFilter, transform);
+        }
+    }
+
+    void UpdatePolygonCollider2D(MeshFilter meshFilter, Transform trns)
+    {
+        if (meshFilter.sharedMesh == null)
+        {
+            Debug.LogWarning(meshFilter.gameObject.name + " has no Mesh set on its MeshFilter component!");
+            return;
+        }
+
+
+
+        PolygonCollider2D polygonCollider2D = meshFilter.GetComponent<PolygonCollider2D>();
+        polygonCollider2D.pathCount = 1;
+
+        List<Vector3> vertices = new List<Vector3>();
+        meshFilter.sharedMesh.GetVertices(vertices);
+
+        var boundaryPath = EdgeHelpers.GetEdges(meshFilter.sharedMesh.triangles).FindBoundary().SortEdges();
+
+        Vector3[] yourVectors = new Vector3[boundaryPath.Count];
+
+        for (int i = 0; i < boundaryPath.Count; i++)
+        {
+            yourVectors[i] = vertices[boundaryPath[i].v1];// + trns.position; //;
+        }
+
+        List<Vector2> newColliderVertices = new List<Vector2>();
+
+        for (int i = 0; i < yourVectors.Length; i++)
+        {
+            //GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            //cube.transform.position = new Vector3(yourVectors[i].x, yourVectors[i].y, yourVectors[i].z);
+            //cube.transform.localScale = Vector3.one * 0.1f;
+            //cube.name = "delete";
+
+            newColliderVertices.Add(new Vector2(yourVectors[i].x, yourVectors[i].y));
+        }
+
+        Vector2[] newPoints = newColliderVertices.Distinct().ToArray();
+
+
+        polygonCollider2D.SetPath(0, newPoints);
+        Debug.Log(meshFilter.gameObject.name + " PolygonCollider2D updated.");
+    }
+
+
+}
+
+public static class EdgeHelpers
+{
+    public struct Edge
+    {
+        public int v1;
+        public int v2;
+        public int triangleIndex;
+        public Edge(int aV1, int aV2, int aIndex)
+        {
+            v1 = aV1;
+            v2 = aV2;
+            triangleIndex = aIndex;
+        }
+    }
+
+    public static List<Edge> GetEdges(int[] aIndices)
+    {
+        List<Edge> result = new List<Edge>();
+        for (int i = 0; i < aIndices.Length; i += 3)
+        {
+            int v1 = aIndices[i];
+            int v2 = aIndices[i + 1];
+            int v3 = aIndices[i + 2];
+            result.Add(new Edge(v1, v2, i));
+            result.Add(new Edge(v2, v3, i));
+            result.Add(new Edge(v3, v1, i));
+        }
+        return result;
+    }
+
+    public static List<Edge> FindBoundary(this List<Edge> aEdges)
+    {
+        List<Edge> result = new List<Edge>(aEdges);
+        for (int i = result.Count - 1; i > 0; i--)
+        {
+            for (int n = i - 1; n >= 0; n--)
+            {
+                if (result[i].v1 == result[n].v2 && result[i].v2 == result[n].v1)
+                {
+                    // shared edge so remove both
+                    result.RemoveAt(i);
+                    result.RemoveAt(n);
+                    i--;
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+    public static List<Edge> SortEdges(this List<Edge> aEdges)
+    {
+        List<Edge> result = new List<Edge>(aEdges);
+        for (int i = 0; i < result.Count - 2; i++)
+        {
+            Edge E = result[i];
+            for (int n = i + 1; n < result.Count; n++)
+            {
+                Edge a = result[n];
+                if (E.v2 == a.v1)
+                {
+                    // in this case they are already in order so just continoue with the next one
+                    if (n == i + 1)
+                        break;
+                    // if we found a match, swap them with the next one after "i"
+                    result[n] = result[i + 1];
+                    result[i + 1] = a;
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+}
